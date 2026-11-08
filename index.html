@@ -1,7 +1,16 @@
+<!doctype html>
+<html lang="fr">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Fonte & Fourneaux</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#181c25">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}</style>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
@@ -300,8 +309,11 @@ table.plain th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;co
 <div id="sheet" class="sheet" hidden><div class="sheet-bg" data-a="closeSheet"></div><div class="sheet-card" id="sheetCard" role="dialog" aria-modal="true"><button class="sheet-x" data-a="closeSheet" aria-label="Fermer">✕</button><div id="sheetBody"></div></div></div>
 <div id="toast" class="toast" hidden role="status"></div>
 <input type="file" id="exoFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
 
 <script>
+/* PWA = version installable hors ligne (fichier index.html sur GitHub Pages) : pas d'IA, données sur l'appareil. */
+const PWA=!!document.querySelector('link[rel="manifest"]');
 /* ================= Données ================= */
 const DAYS=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const TYPES=['b','l','d','s'];
@@ -472,7 +484,7 @@ const RECIPES=[
 const clone=o=>JSON.parse(JSON.stringify(o));
 const defPlan=()=>({b:{on:true,days:[1,1,1,1,1,1,1],n:2},l:{on:true,days:[1,1,1,1,1,1,1],n:2},d:{on:true,days:[1,1,1,1,1,1,1],n:3},s:{on:true,days:[1,1,1,1,1,1,1],n:2}});
 const DEF=()=>({
-  v:2,
+  v:3,
   profile:{edited:false,sex:'h',age:28,height:178,weight:75,activity:1.55,goal:'masse',protein:2,kcalOverride:'',dislikes:'',season:'auto',sessionsGoal:''},
   plan:defPlan(),activeProgram:'3',programs:clone(PROGRAMS),
   week:null,shop:{checked:{},extras:[],removed:{},deleted:null},chat:[],
@@ -484,6 +496,9 @@ try{const s=JSON.parse(localStorage.getItem('ff-state')||'null');if(s)state=Obje
 let stamps={};try{stamps=JSON.parse(localStorage.getItem('ff-stamps')||'{}')||{}}catch(e){}
 function migrate(){
   if(!state.v||state.v<2){state.programs=clone(PROGRAMS);state.current=null;state.v=2;if(state.week&&!state.week.dishes)state.week=null}
+  if(state.v<3){const RN={'Dips ou développé prise serrée':'Dips','Tractions ou tirage vertical':'Tractions'};
+    Object.values(state.programs||{}).forEach(p=>(p.days||[]).forEach(d=>(d.ex||[]).forEach(e=>{if(RN[e.n])e.n=RN[e.n]})));
+    (state.sessions||[]).forEach(se=>(se.ex||[]).forEach(e=>{if(RN[e.n])e.n=RN[e.n]}));state.v=3}
   if(!state.plan)state.plan=defPlan();
   if(!state.exoImg)state.exoImg={};
   if(!state.shop)state.shop={checked:{},extras:[]};
@@ -526,7 +541,7 @@ const weekGoal=()=>+state.profile.sessionsGoal||prog().days.length;
 const dislikes=()=>String(state.profile.dislikes||'').toLowerCase().split(/[,;\n]/).map(s=>s.trim()).filter(Boolean);
 
 /* ================= Sauvegarde ================= */
-function setSync(s){const el=$('#sync');el.className='sync '+(s==='ok'?'ok':s==='err'?'err':'');el.textContent=s==='ok'?'Sauvegardé':s==='err'?'Erreur de sauvegarde':s==='load'?'Chargement…':s==='saving'?'Enregistrement…':'Sur cet appareil'}
+function setSync(s){const el=$('#sync');el.className='sync '+(s==='ok'?'ok':s==='err'?'err':'');el.textContent=s==='ok'?'Sauvegardé':s==='err'?'Erreur de sauvegarde':s==='load'?'Chargement…':s==='saving'?'Enregistrement…':PWA?'Hors ligne OK':'Sur cet appareil'}
 function saveLocal(){try{localStorage.setItem('ff-state',JSON.stringify(state));localStorage.setItem('ff-stamps',JSON.stringify(stamps))}catch(e){}}
 const timers={},writing={};
 function persist(...docs){const now=Date.now();docs.forEach(d=>stamps[d]=now);saveLocal();if(!db)return;setSync('saving');for(const d of docs){clearTimeout(timers[d]);timers[d]=setTimeout(()=>{delete timers[d];writeDoc(d)},400)}}
@@ -554,7 +569,7 @@ async function initCloud(){
     const push=new Set(Object.keys(DOCS).filter(k=>stamps[k]));
     snap.docs.forEach(doc=>{if(!DOCS[doc.id])return;const v=doc.data()||{};const remote=+v.updatedAt||0;
       if((stamps[doc.id]||0)>remote)return;
-      push.delete(doc.id);stamps[doc.id]=remote;DOCS[doc.id].forEach(k=>{state[k]=v[k]!==undefined?v[k]:DEF()[k]})});
+      push.delete(doc.id);stamps[doc.id]=remote;DOCS[doc.id].forEach(k=>{state[k]=v[k]!==undefined?v[k]:(k==='v'?1:DEF()[k])})});
     const oldV=state.v;migrate();
     if(oldV!==state.v)Object.keys(DOCS).forEach(k=>push.add(k));
     push.forEach(k=>writeDoc(k));
@@ -625,12 +640,21 @@ function bodyMap(prim,sec){
   return `<svg class="bodymap" viewBox="0 0 250 266" role="img" aria-label="Muscles travaillés"><g>${fig(frontHalf,abs)}<text x="60" y="264" text-anchor="middle">Face</text></g><g transform="translate(130 0)">${fig(backHalf,'')}<text x="60" y="264" text-anchor="middle">Dos</text></g></svg><div class="legend"><span><i style="background:var(--hl)"></i>Principal</span><span><i style="background:var(--hl2)"></i>Secondaire</span></div>`;
 }
 const musPills=(x,max=9)=>x?[...x.prim.map(m=>`<span class="pill on">${MUS[m]}</span>`),...x.sec.map(m=>`<span class="pill">${MUS[m]}</span>`)].slice(0,max).join('')+`<span class="pill">${esc(x.eq)}</span>`:'<span class="pill">Exercice perso</span>';
-const imgSrc=n=>state.exoImg&&state.exoImg[n]?'/_blob/'+state.exoImg[n].id:null;
+const localImgs={};
+const imgSrc=n=>PWA?(localImgs[n]||null):(state.exoImg&&state.exoImg[n]?'/_blob/'+state.exoImg[n].id:null);
+const IDB={p:null,open(){return this.p||(this.p=new Promise((res,rej)=>{const r=indexedDB.open('ff-img',1);r.onupgradeneeded=()=>r.result.createObjectStore('img');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}))},
+  async tx(mode,fn){const d=await this.open();return new Promise((res,rej)=>{const t=d.transaction('img',mode);const out=fn(t.objectStore('img'));t.oncomplete=()=>res(out&&out.result);t.onerror=()=>rej(t.error)})},
+  put(k,v){return this.tx('readwrite',s=>s.put(v,k))},del(k){return this.tx('readwrite',s=>s.delete(k))},
+  async all(){const d=await this.open();return new Promise((res,rej)=>{const out={};const rq=d.transaction('img').objectStore('img').openCursor();rq.onsuccess=()=>{const c=rq.result;if(c){out[c.key]=c.value;c.continue()}else res(out)};rq.onerror=()=>rej(rq.error)})}};
+async function loadLocalImgs(){try{const all=await IDB.all();Object.entries(all).forEach(([k,b])=>localImgs[k]=URL.createObjectURL(b));if(Object.keys(all).length)render()}catch(e){}}
 const imgSearchUrl=n=>'https://www.google.com/search?tbm=isch&q='+encodeURIComponent(n+' exercice muscles illustration');
 let assetsP;async function getAssets(){if(!window.claude||!claude.use)return null;assetsP=assetsP||claude.use('assets');return await assetsP}
 async function uploadExoImg(file){
   const name=ui.sheet?.type==='exo'?ui.sheet.name:null;if(!name)return;
   if(!/^image\//.test(file.type)){toast('Choisis une image (JPG, PNG, GIF ou WebP).');return}
+  if(PWA){if(file.size>15e6){toast('Image trop lourde (15 Mo max).');return}
+    try{await IDB.put(name,file);if(localImgs[name])URL.revokeObjectURL(localImgs[name]);localImgs[name]=URL.createObjectURL(file);toast('Image ajoutée')}catch(e){toast("Impossible d'enregistrer l'image sur l'appareil.")}
+    renderSheet();rerenderKeep();return}
   const as=await getAssets();if(!as){toast("L'ajout d'images ne marche que dans l'appli sur claude.ai.");return}
   ui.busy.img=true;renderSheet();
   try{const res=await as.upload(file);const old=state.exoImg[name];state.exoImg[name]={id:res.id};persist('profile');if(old&&old.id!==res.id)as.delete(old.id).catch(()=>{});toast('Image ajoutée')}
@@ -723,7 +747,7 @@ function planner(){
     <div class="row" style="border-top:1px solid var(--line);padding-top:12px"><div class="field" style="width:170px"><label for="p-kcalOverride2">Calories par jour</label><input id="p-kcalOverride2" type="number" step="50" data-p="kcalOverride" value="${esc(state.profile.kcalOverride)}" placeholder="auto : ${fr(t.kcal)}"></div>
     <div class="field" style="width:170px"><label for="p-protein2">Protéines</label><select id="p-protein2" data-p="protein">${[1.6,1.8,2,2.2].map(v=>`<option value="${v}" ${+state.profile.protein===v?'selected':''}>${fr(v,1)} g/kg</option>`).join('')}</select></div>
     <div class="field" style="flex:1;min-width:200px"><label for="p-dislikes2">À éviter</label><input id="p-dislikes2" data-p="dislikes" value="${esc(state.profile.dislikes)}" placeholder="ex. saumon, champignons"></div></div>
-    <div class="row"><button class="btn" data-a="newWeek">Créer le menu (bibliothèque)</button><button class="btn primary" data-a="aiWeek" ${ui.busy.week?'disabled':''}>${ui.busy.week?'<span class="spin"></span> Génération…':"Créer le menu avec l'IA"}</button></div></section>`;
+    <div class="row"><button class="btn" data-a="newWeek">Créer le menu (bibliothèque)</button>${PWA?'':`<button class="btn primary" data-a="aiWeek" ${ui.busy.week?'disabled':''}>${ui.busy.week?'<span class="spin"></span> Génération…':"Créer le menu avec l'IA"}</button>`}</div></section>`;
 }
 function dishCard(d){
   const r=d.recipe,f=dishFactor(d),n=d.days.length,k=keepInfo(d),busy=ui.busy[d.uid];
@@ -738,7 +762,7 @@ function dishCard(d){
     ${ui.adjust===d.uid?`<form class="adjust" data-form="adjust" data-u="${d.uid}"><label class="small" for="adj-${d.uid}"><b>Qu'est-ce que tu veux changer ?</b></label><textarea id="adj-${d.uid}" placeholder="Ex. j'aime pas la patate douce, remplace-la par du riz">${esc(ui.adjustText||'')}</textarea>
       <div class="chips">${['Plus rapide','Moins cher','Plus de protéines','Sans poisson','Plus de légumes','Version végétarienne'].map(q=>`<button type="button" class="chip" data-a="adjQuick" data-q="${q}">${q}</button>`).join('')}</div>
       <div class="row"><button class="btn primary sm" ${busy?'disabled':''}>${busy?'<span class="spin"></span> Modification…':'Modifier la recette'}</button><button type="button" class="btn sm ghost" data-a="adjClose">Annuler</button></div></form>`:
-    `<div class="row" style="margin-top:10px"><button class="btn sm" data-a="adjOpen" data-u="${d.uid}">Modifier avec l'IA</button><button class="btn sm" data-a="swap" data-u="${d.uid}">Autre recette</button><button class="btn sm ghost" data-a="aiOne" data-u="${d.uid}" ${busy?'disabled':''}>${busy?'<span class="spin"></span>':"Nouvelle idée IA"}</button></div>`}
+    `<div class="row" style="margin-top:10px">${PWA?'':`<button class="btn sm" data-a="adjOpen" data-u="${d.uid}">Modifier avec l'IA</button>`}<button class="btn sm" data-a="swap" data-u="${d.uid}">Autre recette</button>${PWA?'':`<button class="btn sm ghost" data-a="aiOne" data-u="${d.uid}" ${busy?'disabled':''}>${busy?'<span class="spin"></span>':"Nouvelle idée IA"}</button>`}</div>`}
   </article>`;
 }
 function vRecettes(){
@@ -756,7 +780,7 @@ function vRecettes(){
   }
   return `<div class="stack">
     <div class="pagehead"><div><div class="eyebrow">Semaine du ${fmtD(w.key)} · ${esc(w.source||'Bibliothèque')}</div><h1>Menu ${esc(w.season||season())}</h1><p class="small muted">Recettes de saison, portions calculées pour ta cible. ${w.dishes.length} plats à cuisiner.</p></div>
-      <div class="row"><button class="btn sm ${ui.planner?'primary':''}" data-a="planToggle">Ma semaine</button><button class="btn sm" data-a="newWeek">Nouveau menu</button><button class="btn sm primary" data-a="aiWeek" ${ui.busy.week?'disabled':''}>${ui.busy.week?'<span class="spin"></span> Génération…':"Menu par l'IA"}</button></div></div>
+      <div class="row"><button class="btn sm ${ui.planner?'primary':''}" data-a="planToggle">Ma semaine</button><button class="btn sm" data-a="newWeek">Nouveau menu</button>${PWA?'':`<button class="btn sm primary" data-a="aiWeek" ${ui.busy.week?'disabled':''}>${ui.busy.week?'<span class="spin"></span> Génération…':"Menu par l'IA"}</button>`}</div></div>
     ${exampleBanner()}
     ${needsPlanning()&&!ui.planner?`<div class="banner info"><span class="small"><b>C'est le week-end.</b> Prépare la semaine prochaine : combien de repas, quels jours, combien de plats à cuisiner.</span><button class="btn sm primary" data-a="planNextOpen">Préparer la semaine prochaine</button></div>`:''}
     ${old&&!needsPlanning()&&!ui.planner?`<div class="banner"><span class="small">Ce menu date de la semaine du ${fmtD(w.key)}.</span><button class="btn sm primary" data-a="planToggle">Préparer cette semaine</button></div>`:''}
@@ -786,16 +810,16 @@ function vCourses(){
   return `<div class="stack">
     <div class="pagehead"><div><div class="eyebrow">Semaine du ${fmtD(state.week.key)}</div><h1>Liste de courses</h1><p class="small muted">Quantités totales pour tous les plats de la semaine. Coche ce que tu as déjà à la maison ou ce qui est dans le panier : c'est barré.</p></div>
       ${del?'':`<div class="row"><span class="pill num" id="gotPill">${got} / ${items.length} barrés</span><button class="btn sm" data-a="copy">Copier la liste</button><button class="btn sm ghost" data-a="untick">Tout décocher</button><button class="btn sm ghost danger" data-a="deleteList">Supprimer la liste</button></div>`}</div>
-    <div class="grid-courses">
+    <div class="${PWA?'':'grid-courses'}">
       <section class="card">${groups}
         <form class="addrow" data-form="extra" ${del?'hidden':''}><input id="extra" placeholder="Ajouter un article (ex. café, éponges)" aria-label="Ajouter un article"><button class="btn">Ajouter</button></form>
         ${ui.copyText?`<textarea class="copybox" id="copybox" readonly>${esc(ui.copyText)}</textarea><p class="tiny muted">Sélectionne le texte pour le copier.</p>`:''}
       </section>
-      <section class="card chat"><div class="row between"><div><div class="eyebrow">Assistant repas</div><h2>Changer le menu</h2></div>${state.chat?.length?'<button class="btn sm ghost" data-a="clearChat">Effacer</button>':''}</div>
+      ${PWA?'':`<section class="card chat"><div class="row between"><div><div class="eyebrow">Assistant repas</div><h2>Changer le menu</h2></div>${state.chat?.length?'<button class="btn sm ghost" data-a="clearChat">Effacer</button>':''}</div>
         <div class="msgs" id="msgs">${msgs}${ui.busy.chat?`<div class="msg assistant" id="streaming"><span class="spin"></span></div>`:''}</div>
         <div class="suggest"><button class="btn sm" data-a="ask" data-q="Je n'aime pas un des dîners, propose autre chose.">Remplacer un dîner</button><button class="btn sm" data-a="ask" data-q="Organise-moi une session de batch cooking le dimanche pour les déjeuners.">Batch cooking</button><button class="btn sm" data-a="ask" data-q="Comment réduire le budget de cette liste de courses ?">Réduire le budget</button></div>
         <form data-form="chat"><textarea id="chatin" placeholder="Ex. remplace le poisson par du poulet toute la semaine" aria-label="Message à l'assistant"></textarea><button class="btn primary" ${ui.busy.chat?'disabled':''}>Envoyer</button></form>
-      </section></div></div>`;
+      </section>`}</div></div>`;
 }
 
 /* ---- Suivi ---- */
@@ -874,6 +898,9 @@ function vProfil(){
     </div></section>
     <div class="calc num"><div><span class="eyebrow">Métabolisme de base</span><b>${fr(t.bmr)} kcal</b></div><div><span class="eyebrow">Dépense estimée</span><b>${fr(t.tdee)} kcal</b></div><div><span class="eyebrow">Cible quotidienne</span><b>${fr(t.kcal)} kcal</b></div><div><span class="eyebrow">Protéines</span><b>${t.prot} g</b></div><div><span class="eyebrow">Glucides</span><b>${t.glu} g</b></div><div><span class="eyebrow">Lipides</span><b>${t.lip} g</b></div></div>
     <p class="tiny muted">Calcul Mifflin-St Jeor × niveau d'activité. Ce sont des estimations : si ton poids ne bouge pas en 2 à 3 semaines, ajuste de 150 à 200 kcal.</p>
+    ${PWA?`<section class="card stack tight"><h2>Sauvegarde de mes données</h2><p class="small muted">Tes données sont enregistrées uniquement sur ce téléphone. Exporte-les de temps en temps (fichier .json) pour ne rien perdre si tu changes de téléphone ou effaces le navigateur.</p>
+      ${ui.pendingImport?`<div class="banner"><span class="small">Remplacer toutes tes données actuelles par celles du fichier (exporté le ${esc(ui.pendingImport.when)}) ?</span><span class="row"><button class="btn sm primary" data-a="importConfirm">Remplacer</button><button class="btn sm ghost" data-a="importCancel">Annuler</button></span></div>`:''}
+      <div class="row"><button class="btn" data-a="exportData">Exporter mes données</button><button class="btn" data-a="importPick">Importer un fichier</button>${ui.installEvt?'<button class="btn primary" data-a="install">Installer l\'application</button>':''}</div></section>`:''}
     <div class="row"><a class="btn primary" href="#recettes">Voir les recettes</a></div></div>`;
 }
 
@@ -893,7 +920,7 @@ function sheetExo(){
   let body='';
   const src=imgSrc(s.name);
   const imgBlock=src?`<img class="exoimg" src="${esc(src)}" alt="${esc(s.name)}"><div class="row"><button class="btn sm" data-a="imgPick">Changer l'image</button><button class="btn sm ghost ${s.confirmImg?'danger':''}" data-a="imgDel">${s.confirmImg?"Confirmer : retirer l'image":"Retirer l'image"}</button></div>`
-    :`<div class="imgdrop"><b class="small">Ajoute ton illustration</b><span class="tiny muted">Trouve une image ou un GIF de l'exercice, enregistre-le, puis ajoute-le ici (ou copie l'image et colle-la avec Ctrl+V / ⌘+V). Elle s'affichera à chaque fois.</span><div class="row"><button class="btn sm primary" data-a="imgPick" ${ui.busy.img?'disabled':''}>${ui.busy.img?'<span class="spin"></span> Envoi…':'Choisir une image'}</button><a class="btn sm" href="${imgSearchUrl(s.name)}" target="_blank" rel="noopener">Trouver une image ↗</a></div></div>`;
+    :`<div class="imgdrop"><b class="small">Ajoute ton illustration</b><span class="tiny muted">Trouve une image ou un GIF de l'exercice, enregistre-le, puis ajoute-le ici ${PWA?'(ou fais une capture et choisis-la). Elle reste enregistrée sur ce téléphone.':"(ou copie l'image et colle-la avec Ctrl+V / ⌘+V). Elle s'affichera à chaque fois."}</span><div class="row"><button class="btn sm primary" data-a="imgPick" ${ui.busy.img?'disabled':''}>${ui.busy.img?'<span class="spin"></span> Envoi…':'Choisir une image'}</button><a class="btn sm" href="${imgSearchUrl(s.name)}" target="_blank" rel="noopener">Trouver une image ↗</a></div></div>`;
   if(tab==='how'){
     body=imgBlock+(x?`<div class="howto"><div>${bodyMap(x.prim,x.sec)}</div><div class="stack tight"><ol class="steps" style="margin:0">${x.steps.map(t=>`<li>${esc(t)}</li>`).join('')}</ol>${x.tip?`<p class="small"><b>Conseil :</b> ${esc(x.tip)}</p>`:''}<a class="btn sm" href="${videoUrl(s.name)}" target="_blank" rel="noopener">Voir des vidéos de l'exercice ↗</a></div></div>`
       :`<p class="small muted">Exercice ajouté par toi : pas de fiche détaillée.</p><a class="btn sm" href="${videoUrl(s.name)}" target="_blank" rel="noopener">Voir des vidéos de l'exercice ↗</a>`);
@@ -1019,7 +1046,13 @@ const A={
   exo(a){const prev=ui.sheet&&a.dataset.from==='picker'?ui.sheet:null;openSheet({type:'exo',name:a.dataset.n,tab:a.dataset.tab2||'how',back:prev})},
   exoTab(a){ui.sheet.tab=a.dataset.v;renderSheet()},
   imgPick(){$('#exoFile').click()},
-  async imgDel(){const s=ui.sheet;if(!s.confirmImg){s.confirmImg=true;renderSheet();return}const old=state.exoImg[s.name];delete state.exoImg[s.name];persist('profile');s.confirmImg=false;renderSheet();rerenderKeep();if(old){const as=await getAssets();if(as)as.delete(old.id).catch(()=>{})}toast('Image retirée')},
+  exportData(){const blob=new Blob([JSON.stringify({app:'fonte-fourneaux',exported:new Date().toISOString(),state},null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`fonte-fourneaux-${today()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('Fichier exporté')},
+  importPick(){$('#importFile').click()},
+  importConfirm(){const d=ui.pendingImport;if(!d)return;state=Object.assign(DEF(),d.state);migrate();ui.pendingImport=null;ensureWeek();persist(...Object.keys(DOCS));render();toast('Données importées')},
+  importCancel(){ui.pendingImport=null;render()},
+  async install(){const ev=ui.installEvt;if(!ev)return;ev.prompt();try{await ev.userChoice}catch(e){}ui.installEvt=null;render()},
+  async imgDel(){const s=ui.sheet;if(!s.confirmImg){s.confirmImg=true;renderSheet();return}if(PWA){try{await IDB.del(s.name)}catch(e){}if(localImgs[s.name])URL.revokeObjectURL(localImgs[s.name]);delete localImgs[s.name];s.confirmImg=false;renderSheet();rerenderKeep();toast('Image retirée');return}
+    const old=state.exoImg[s.name];delete state.exoImg[s.name];persist('profile');s.confirmImg=false;renderSheet();rerenderKeep();if(old){const as=await getAssets();if(as)as.delete(old.id).catch(()=>{})}toast('Image retirée')},
   prog(a){state.activeProgram=a.dataset.k;persist('profile');render()},
   toggleEdit(){ui.edit=!ui.edit;render()},
   resetProg(){state.programs[state.activeProgram]=clone(PROGRAMS[state.activeProgram]);persist('profile');render();toast('Programme réinitialisé')},
@@ -1107,6 +1140,7 @@ document.addEventListener('input',e=>{const t=e.target;
 });
 document.addEventListener('change',e=>{const t=e.target;
   if(t.id==='exoFile'){const f=t.files&&t.files[0];t.value='';if(f)uploadExoImg(f);return}
+  if(t.id==='importFile'){const f=t.files&&t.files[0];t.value='';if(!f)return;f.text().then(txt=>{const o=JSON.parse(txt);if(!o||o.app!=='fonte-fourneaux'||!o.state)throw 0;ui.pendingImport={state:o.state,when:new Date(o.exported).toLocaleDateString('fr-FR')};location.hash='profil';render()}).catch(()=>toast("Ce fichier n'est pas une sauvegarde Fonte & Fourneaux."));return}
   if(t.dataset.p){const p=state.profile;p[t.dataset.p]=t.type==='number'&&t.value!==''?+t.value:t.value;p.edited=true;persist('profile');rerenderKeep();toast('Enregistré')}
   if(t.dataset.pe){const[i,j,f]=t.dataset.pe.split('|');const d=prog().days[+i];if(j==='name')d.name=t.value;else{const ex=d.ex[+j];ex[f]=f==='s'||f==='rest'?+t.value:t.value}persist('profile')}
   if(t.id==='exsel'){ui.exSel=t.value;rerenderKeep()}
@@ -1125,5 +1159,9 @@ document.addEventListener('paste',e=>{if(ui.sheet?.type!=='exo')return;const f=[
 addEventListener('hashchange',()=>{ui.sheet=null;render();scrollTo(0,0)});
 
 ensureWeek();render();
+if(PWA){loadLocalImgs();
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  addEventListener('beforeinstallprompt',e=>{e.preventDefault();ui.installEvt=e;if(current()==='profil')render()});
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initCloud);else initCloud();
 </script>
